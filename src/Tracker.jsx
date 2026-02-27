@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell } from "recharts";
-import { CheckCircle, Circle, ChevronDown, ChevronUp, Trophy, AlertTriangle, XCircle, StopCircle, Download, Upload, BookOpen, Target, TrendingUp, Calendar } from "lucide-react";
+import { CheckCircle, Circle, ChevronDown, ChevronUp, Trophy, Download, Upload, BookOpen, Target, TrendingUp, Calendar, Smartphone, X } from "lucide-react";
+import QRCode from "qrcode";
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const DAYS = [
@@ -90,6 +91,8 @@ const DAYS = [
     reflect:["You are ready. Everything you need is already in your head.","Test day tip: 45 mins / 24 questions = nearly 2 mins per question. Don't rush.","Results are given immediately after the test ends"] },
 ];
 
+const STORAGE_KEY = "lituk-tracker-v1";
+
 const BAND = (score) => {
   if (score === null || score === undefined || score === "") return null;
   const pct = (score / 24) * 100;
@@ -108,10 +111,34 @@ export default function LifeInUKTracker() {
   const [activeDay, setActiveDay] = useState(null);
   const [importCode, setImportCode] = useState("");
   const [importMsg, setImportMsg] = useState("");
-  const [showImport, setShowImport] = useState(false);
+  const [showSyncPanel, setShowSyncPanel] = useState(false);
   const [copied, setCopied] = useState(false);
   const [startDate, setStartDate] = useState(null);
   const [activeTab, setActiveTab] = useState("tracker");
+  const [qrDataUrl, setQrDataUrl] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // ─── Load from localStorage on mount ─────────────────────────────────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.scores) setScores(data.scores);
+        if (data.checks) setChecks(data.checks);
+        if (data.startDate) setStartDate(data.startDate);
+      }
+    } catch {}
+    setLoaded(true);
+  }, []);
+
+  // ─── Auto-save to localStorage on every change ───────────────────────────
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ scores, checks, startDate }));
+    } catch {}
+  }, [scores, checks, startDate, loaded]);
 
   const scoreEntries = useMemo(() => Object.entries(scores).map(([k, v]) => [parseInt(k), v]).filter(([, v]) => v !== "" && v !== null && v !== undefined), [scores]);
   const completedDays = scoreEntries.length;
@@ -127,10 +154,14 @@ export default function LifeInUKTracker() {
     return w3scores.length >= 5 && w3avg >= 85 && minW3 >= 75 && allAvgPct >= 80;
   }, [scoreEntries, avg]);
 
-  const exportCode = () => {
+  // ─── Export / Import ──────────────────────────────────────────────────────
+  const getSaveCode = () => {
     const data = JSON.stringify({ scores, checks, startDate });
-    const b64 = btoa(unescape(encodeURIComponent(data)));
-    navigator.clipboard.writeText(b64).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+    return btoa(unescape(encodeURIComponent(data)));
+  };
+
+  const exportCode = () => {
+    navigator.clipboard.writeText(getSaveCode()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
   const importProgress = () => {
@@ -140,13 +171,26 @@ export default function LifeInUKTracker() {
       if (data.checks) setChecks(data.checks);
       if (data.startDate) setStartDate(data.startDate);
       setImportMsg("✅ Progress restored successfully!");
-      setShowImport(false);
       setImportCode("");
       setTimeout(() => setImportMsg(""), 3000);
     } catch {
       setImportMsg("❌ Invalid code. Please paste the exact exported code.");
     }
   };
+
+  // ─── QR code generation ───────────────────────────────────────────────────
+  const generateQR = async () => {
+    try {
+      const code = getSaveCode();
+      const url = await QRCode.toDataURL(code, { width: 280, margin: 2, color: { dark: "#1B3A6B", light: "#ffffff" } });
+      setQrDataUrl(url);
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (showSyncPanel) generateQR();
+    else setQrDataUrl(null);
+  }, [showSyncPanel, scores, checks, startDate]);
 
   const handleScore = (dayId, val) => {
     const n = parseInt(val);
@@ -181,21 +225,48 @@ export default function LifeInUKTracker() {
               <p className="text-blue-200 text-sm mt-1">For Kennedy · 24 questions · 45 min · Pass: 18/24 (75%)</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowImport(!showImport)} className="flex items-center gap-1 bg-white bg-opacity-20 hover:bg-opacity-30 text-white text-sm px-3 py-2 rounded-lg transition">
-                <Upload size={14} /> Import
+              <button onClick={() => setShowSyncPanel(!showSyncPanel)} className="flex items-center gap-1 bg-white bg-opacity-20 hover:bg-opacity-30 text-white text-sm px-3 py-2 rounded-lg transition">
+                <Smartphone size={14} /> Sync
               </button>
               <button onClick={exportCode} className="flex items-center gap-1 bg-white text-blue-900 font-semibold text-sm px-3 py-2 rounded-lg hover:bg-blue-50 transition">
-                <Download size={14} /> {copied ? "Copied!" : "Export Save"}
+                <Download size={14} /> {copied ? "Copied!" : "Export"}
               </button>
             </div>
           </div>
-          {showImport && (
-            <div className="mt-3 flex gap-2 flex-wrap">
-              <input value={importCode} onChange={e => setImportCode(e.target.value)} placeholder="Paste your save code here…" className="flex-1 min-w-0 text-gray-800 text-sm px-3 py-2 rounded-lg border" />
-              <button onClick={importProgress} className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-semibold">Restore</button>
+
+          {/* SYNC PANEL */}
+          {showSyncPanel && (
+            <div className="mt-4 bg-white bg-opacity-10 rounded-xl p-4 border border-white border-opacity-20">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-white text-sm">📱 Sync to another device</h3>
+                <button onClick={() => setShowSyncPanel(false)} className="text-blue-200 hover:text-white"><X size={16}/></button>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* QR code */}
+                <div className="text-center">
+                  <p className="text-blue-200 text-xs mb-2">Scan this QR code on your other device, then paste the code into Import</p>
+                  {qrDataUrl
+                    ? <img src={qrDataUrl} alt="Sync QR Code" className="mx-auto rounded-lg bg-white p-2" style={{width:180,height:180}}/>
+                    : <div className="mx-auto rounded-lg bg-white bg-opacity-10 flex items-center justify-center" style={{width:180,height:180}}><span className="text-blue-200 text-xs">Generating…</span></div>
+                  }
+                </div>
+                {/* Manual import */}
+                <div className="flex flex-col gap-2">
+                  <p className="text-blue-200 text-xs">Or paste a save code from another device:</p>
+                  <textarea
+                    value={importCode}
+                    onChange={e => setImportCode(e.target.value)}
+                    placeholder="Paste save code here…"
+                    className="flex-1 text-gray-800 text-xs px-3 py-2 rounded-lg border resize-none min-h-[80px]"
+                  />
+                  <button onClick={importProgress} className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-semibold">
+                    Restore Progress
+                  </button>
+                  {importMsg && <p className="text-sm font-medium text-yellow-200">{importMsg}</p>}
+                </div>
+              </div>
             </div>
           )}
-          {importMsg && <p className="mt-2 text-sm font-medium text-yellow-200">{importMsg}</p>}
 
           {/* STATS ROW */}
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -245,7 +316,7 @@ export default function LifeInUKTracker() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-semibold text-gray-800 text-sm">{day.title}</span>
-                                {day.id === 6 || day.id === 7 || day.id === 13 || day.id === 14 || day.id === 20 || day.id === 21 ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Weekend</span> : null}
+                                {[6,7,13,14,20,21].includes(day.id) ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Weekend</span> : null}
                               </div>
                               <div className="text-gray-500 text-xs mt-0.5 truncate">{day.topic} · {day.time}</div>
                             </div>
@@ -267,17 +338,23 @@ export default function LifeInUKTracker() {
                         {/* Expanded Day Panel */}
                         {isOpen && (
                           <div className="border-t border-gray-100 p-4 space-y-4">
-                            {/* Tasks */}
+                            {/* Tasks — FIX: div wrapper with onClick instead of label+button */}
                             <div>
                               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">✅ Tasks</h4>
                               <div className="space-y-2">
                                 {day.tasks.map((task, i) => (
-                                  <label key={i} className="flex items-start gap-2 cursor-pointer group">
-                                    <button onClick={() => toggleCheck(day.id, i)} className="mt-0.5 shrink-0">
-                                      {dayChecks(day.id)[i] ? <CheckCircle size={18} className="text-emerald-500"/> : <Circle size={18} className="text-gray-300 group-hover:text-gray-400"/>}
-                                    </button>
+                                  <div
+                                    key={i}
+                                    onClick={() => toggleCheck(day.id, i)}
+                                    className="flex items-start gap-2 cursor-pointer group select-none"
+                                  >
+                                    <div className="mt-0.5 shrink-0">
+                                      {dayChecks(day.id)[i]
+                                        ? <CheckCircle size={18} className="text-emerald-500"/>
+                                        : <Circle size={18} className="text-gray-300 group-hover:text-gray-400"/>}
+                                    </div>
                                     <span className={`text-sm leading-snug ${dayChecks(day.id)[i] ? "line-through text-gray-400" : "text-gray-700"}`}>{task}</span>
-                                  </label>
+                                  </div>
                                 ))}
                               </div>
                             </div>
@@ -303,7 +380,7 @@ export default function LifeInUKTracker() {
                                     className="w-20 text-center text-lg font-bold border-2 border-gray-300 rounded-lg py-2 focus:border-blue-500 focus:outline-none"
                                   />
                                   <span className="text-gray-500 text-sm font-medium">/ 24</span>
-                                  {score !== undefined && score !== "" && <span className="text-gray-600 text-sm font-medium">=  {Math.round(score/24*100)}%</span>}
+                                  {score !== undefined && score !== "" && <span className="text-gray-600 text-sm font-medium">= {Math.round(score/24*100)}%</span>}
                                 </div>
                                 {band && (
                                   <div className={`flex-1 rounded-lg p-2 border ${band.bg}`}>
@@ -353,7 +430,6 @@ export default function LifeInUKTracker() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            {/* Per-week averages */}
             <div className="grid grid-cols-3 gap-3">
               {[1,2,3].map(w => {
                 const ws = scoreEntries.filter(([d]) => DAYS.find(x => x.id === d)?.week === w);
@@ -387,8 +463,6 @@ export default function LifeInUKTracker() {
                 <p className="text-blue-600 text-xs mt-1">Log enough scores to unlock the full assessment.</p>
               </div>
             )}
-
-            {/* Checklist */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-2">
               <h3 className="font-bold text-gray-800 mb-3">Ready-to-Book Criteria</h3>
               {(() => {
@@ -413,8 +487,6 @@ export default function LifeInUKTracker() {
                 ));
               })()}
             </div>
-
-            {/* Scoring guide */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
               <h3 className="font-bold text-gray-800 mb-3">Scoring Band Guide</h3>
               <div className="space-y-2">
@@ -437,9 +509,11 @@ export default function LifeInUKTracker() {
           </div>
         )}
 
-        {/* HOW TO SAVE */}
-        <div className="my-4 bg-yellow-50 border border-yellow-200 rounded-xl p-3">
-          <p className="text-xs text-yellow-800 font-medium">💾 <strong>To save progress between sessions:</strong> tap <strong>Export Save</strong> (top right) → it copies a code to your clipboard → save it somewhere (Notes app, email to yourself). Next session: paste it into Import and hit Restore.</p>
+        {/* AUTO-SAVE NOTICE */}
+        <div className="my-4 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+          <p className="text-xs text-emerald-800 font-medium">
+            💾 <strong>Progress auto-saves in this browser.</strong> To use on another device: tap <strong>Sync</strong> (top right) → scan the QR code on your other device → copy the code that appears → paste it into the Import field there.
+          </p>
         </div>
       </div>
     </div>
