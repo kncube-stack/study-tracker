@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell } from "recharts";
-import { CheckCircle, Circle, ChevronDown, ChevronUp, Trophy, Download, Upload, BookOpen, Target, TrendingUp, Calendar, Smartphone, X } from "lucide-react";
+import { CheckCircle, Circle, ChevronDown, ChevronUp, Trophy, Download, Target, TrendingUp, Calendar, Smartphone, X } from "lucide-react";
 import QRCode from "qrcode";
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
@@ -118,9 +118,23 @@ export default function LifeInUKTracker() {
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [loaded, setLoaded] = useState(false);
 
-  // ─── Load from localStorage on mount ─────────────────────────────────────
+  // ─── Load from localStorage or URL ?sync= param on mount ────────────────
   useEffect(() => {
     try {
+      // Check for ?sync= in URL first (from QR code scan on another device)
+      const params = new URLSearchParams(window.location.search);
+      const syncCode = params.get("sync");
+      if (syncCode) {
+        const data = JSON.parse(decodeURIComponent(escape(atob(syncCode.trim()))));
+        if (data.scores) setScores(data.scores);
+        if (data.checks) setChecks(data.checks);
+        if (data.startDate) setStartDate(data.startDate);
+        // Clean the URL so it doesn't re-import on refresh
+        window.history.replaceState({}, "", window.location.pathname);
+        setLoaded(true);
+        return;
+      }
+      // Otherwise load from localStorage
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const data = JSON.parse(saved);
@@ -178,11 +192,12 @@ export default function LifeInUKTracker() {
     }
   };
 
-  // ─── QR code generation ───────────────────────────────────────────────────
+  // ─── QR code generation — encodes a full URL so scanning opens the app ──
   const generateQR = async () => {
     try {
       const code = getSaveCode();
-      const url = await QRCode.toDataURL(code, { width: 280, margin: 2, color: { dark: "#1B3A6B", light: "#ffffff" } });
+      const syncUrl = `${window.location.origin}${window.location.pathname}?sync=${code}`;
+      const url = await QRCode.toDataURL(syncUrl, { width: 280, margin: 2, color: { dark: "#1B3A6B", light: "#ffffff" } });
       setQrDataUrl(url);
     } catch {}
   };
@@ -225,7 +240,7 @@ export default function LifeInUKTracker() {
               <p className="text-blue-200 text-sm mt-1">For Kennedy · 24 questions · 45 min · Pass: 18/24 (75%)</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowSyncPanel(!showSyncPanel)} className="flex items-center gap-1 bg-white bg-opacity-20 hover:bg-opacity-30 text-white text-sm px-3 py-2 rounded-lg transition">
+              <button onClick={() => setShowSyncPanel(!showSyncPanel)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-sm px-3 py-2 rounded-lg transition">
                 <Smartphone size={14} /> Sync
               </button>
               <button onClick={exportCode} className="flex items-center gap-1 bg-white text-blue-900 font-semibold text-sm px-3 py-2 rounded-lg hover:bg-blue-50 transition">
@@ -236,7 +251,7 @@ export default function LifeInUKTracker() {
 
           {/* SYNC PANEL */}
           {showSyncPanel && (
-            <div className="mt-4 bg-white bg-opacity-10 rounded-xl p-4 border border-white border-opacity-20">
+            <div className="mt-4 bg-white/10 rounded-xl p-4 border border-white/20">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-white text-sm">📱 Sync to another device</h3>
                 <button onClick={() => setShowSyncPanel(false)} className="text-blue-200 hover:text-white"><X size={16}/></button>
@@ -244,10 +259,10 @@ export default function LifeInUKTracker() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {/* QR code */}
                 <div className="text-center">
-                  <p className="text-blue-200 text-xs mb-2">Scan this QR code on your other device, then paste the code into Import</p>
+                  <p className="text-blue-200 text-xs mb-2">Scan with your other device's camera — it opens the app with your progress already loaded</p>
                   {qrDataUrl
                     ? <img src={qrDataUrl} alt="Sync QR Code" className="mx-auto rounded-lg bg-white p-2" style={{width:180,height:180}}/>
-                    : <div className="mx-auto rounded-lg bg-white bg-opacity-10 flex items-center justify-center" style={{width:180,height:180}}><span className="text-blue-200 text-xs">Generating…</span></div>
+                    : <div className="mx-auto rounded-lg bg-white/10 flex items-center justify-center" style={{width:180,height:180}}><span className="text-blue-200 text-xs">Generating…</span></div>
                   }
                 </div>
                 {/* Manual import */}
@@ -416,8 +431,8 @@ export default function LifeInUKTracker() {
               <h3 className="font-bold text-gray-800 mb-1">Score History (%)</h3>
               <p className="text-gray-500 text-xs mb-4">Log scores on Day cards to see your progress chart. Green line = 85% target. Red line = 75% pass mark.</p>
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={chartData.filter(d => d.score !== null)} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                  <XAxis dataKey="day" tick={{ fontSize: 11 }} label={{ value: "Day", position: "insideBottom", offset: -2, fontSize: 11 }} />
+                <BarChart data={chartData.filter(d => d.score !== null)} margin={{ top: 5, right: 10, left: -20, bottom: 20 }}>
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} label={{ value: "Day", position: "insideBottom", offset: -10, fontSize: 11 }} />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={v => `${v}%`} />
                   <Tooltip formatter={(v) => [`${v}%`, "Score"]} labelFormatter={(l) => `Day ${l}`} />
                   <ReferenceLine y={85} stroke="#059669" strokeDasharray="4 2" label={{ value: "85% Target", position: "right", fontSize: 10, fill: "#059669" }} />
@@ -467,7 +482,7 @@ export default function LifeInUKTracker() {
               <h3 className="font-bold text-gray-800 mb-3">Ready-to-Book Criteria</h3>
               {(() => {
                 const w3s = scoreEntries.filter(([d]) => d >= 15).map(([,v]) => v);
-                const allAvg = avg ? avg/24*100 : 0;
+                const allAvg = avg !== null ? avg/24*100 : 0;
                 const w3avg = w3s.length ? w3s.reduce((a,b)=>a+b,0)/w3s.length/24*100 : 0;
                 const minW3 = w3s.length ? Math.min(...w3s)/24*100 : 0;
                 const criteria = [
@@ -512,7 +527,7 @@ export default function LifeInUKTracker() {
         {/* AUTO-SAVE NOTICE */}
         <div className="my-4 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
           <p className="text-xs text-emerald-800 font-medium">
-            💾 <strong>Progress auto-saves in this browser.</strong> To use on another device: tap <strong>Sync</strong> (top right) → scan the QR code on your other device → copy the code that appears → paste it into the Import field there.
+            💾 <strong>Progress auto-saves in this browser.</strong> Switching devices? Tap <strong>Sync</strong> (top right) and scan the QR code on your other device — it opens the app with your progress already loaded.
           </p>
         </div>
       </div>
@@ -522,7 +537,7 @@ export default function LifeInUKTracker() {
 
 function StatCard({ icon, label, value, sub, highlight }) {
   return (
-    <div className={`rounded-xl px-3 py-2 text-center ${highlight ? "bg-yellow-400 text-yellow-900" : "bg-white bg-opacity-15 text-white"}`}>
+    <div className={`rounded-xl px-3 py-2 text-center ${highlight ? "bg-yellow-400 text-yellow-900" : "bg-white/15 text-white"}`}>
       <div className={`flex items-center justify-center gap-1 text-xs mb-1 ${highlight ? "text-yellow-800" : "text-blue-200"}`}>{icon} {label}</div>
       <div className={`font-black text-sm leading-tight ${highlight ? "text-yellow-900" : "text-white"}`}>{value}</div>
       {sub && <div className={`text-xs ${highlight ? "text-yellow-700" : "text-blue-300"}`}>{sub}</div>}
