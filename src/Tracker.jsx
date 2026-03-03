@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell } from "recharts";
 import { CheckCircle, Circle, ChevronDown, ChevronUp, Trophy, Download, Target, TrendingUp, Calendar, Smartphone, X } from "lucide-react";
 import QRCode from "qrcode";
+import Summary from "./Summary";
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const DAYS = [
@@ -296,7 +297,7 @@ export default function LifeInUKTracker() {
       {/* TABS */}
       <div className="max-w-4xl mx-auto px-4">
         <div className="flex border-b border-gray-200 mt-4 gap-1">
-          {[["tracker", "📅 Daily Tracker"], ["chart", "📊 Progress Chart"], ["ready", "🏆 Am I Ready?"]].map(([k, l]) => (
+          {[["tracker", "📅 Daily Tracker"], ["chart", "📊 Progress Chart"], ["ready", "🏆 Am I Ready?"], ["summary", "📖 Summary"]].map(([k, l]) => (
             <button key={k} onClick={() => setActiveTab(k)} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${activeTab === k ? "bg-white border border-b-white text-blue-800 border-gray-200" : "text-gray-500 hover:text-gray-700"}`}>{l}</button>
           ))}
         </div>
@@ -521,6 +522,13 @@ export default function LifeInUKTracker() {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB: SUMMARY */}
+        {activeTab === "summary" && (
+          <div className="py-4">
+            <Summary />
           </div>
         )}
 
