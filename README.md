@@ -1,16 +1,24 @@
-# React + Vite
+# Life in the UK Study Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A 21-day study plan with daily task checks, practice scores, progress charts and a revision summary. This is an unofficial study aid. Check current requirements and approved study materials at https://www.gov.uk/life-in-the-uk-test. The study content is not automatically updated.
 
-Currently, two official plugins are available:
+## Your progress
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Progress is saved only in this browser. Clearing site data or using another browser does not transfer it. Export a save code regularly and keep it private. Codes are not encrypted.
 
-## React Compiler
+Sync transfers daily scores and tasks, not the Summary checklist. Scan the QR code or paste a save code, review it, then explicitly confirm replacement. Cancel leaves current progress untouched. Older query-string links still work; new links keep progress in the URL fragment, which is not sent with the page request.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+If storage cannot be read or written, or another tab changes progress, saving pauses with a visible warning. Export your current work before closing and reload to pick up the latest stored progress. Invalid stored data is never automatically erased. Restore a valid backup only when you intend to replace it.
 
-## Expanding the ESLint configuration
+## Development
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Use Node.js 22 or newer.
+
+- `npm ci`
+- `npm run dev` (local development only)
+- `npm test`
+- `npm run lint`
+- `npm run build`
+- `npm run preview`
+
+Vercel hosts the static `dist` build. `vercel.json` sets the app's security headers. No server, account, analytics or external data service is required. Keep tests in isolated browser contexts with synthetic data; never clear a real browser profile.

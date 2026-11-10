@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell } from "recharts";
 import { CheckCircle, Circle, ChevronDown, ChevronUp, Trophy, Download, Target, TrendingUp, Calendar, Smartphone, X } from "lucide-react";
 import QRCode from "qrcode";
 import Summary from "./Summary";
+import { STORAGE_KEY, loadProgress, incomingProgress, encodeProgress, decodeProgress } from "./progress";
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const DAYS = [
@@ -92,7 +93,7 @@ const DAYS = [
     reflect:["You are ready. Everything you need is already in your head.","Test day tip: 45 mins / 24 questions = nearly 2 mins per question. Don't rush.","Results are given immediately after the test ends"] },
 ];
 
-const STORAGE_KEY = "lituk-tracker-v1";
+
 
 const BAND = (score) => {
   if (score === null || score === undefined || score === "") return null;
@@ -107,53 +108,54 @@ const WEEK_COLORS = { 1: "#0D7A5F", 2: "#5B2C6F", 3: "#C0392B" };
 const WEEK_LABELS = { 1: "Read & Absorb", 2: "Practice Tests", 3: "Mock Exams" };
 
 export default function LifeInUKTracker() {
-  const [scores, setScores] = useState({});
-  const [checks, setChecks] = useState({});
+  const [initial] = useState(() => loadProgress());
+  const [incoming] = useState(() => incomingProgress(window.location));
+  const [scores, setScores] = useState(initial.data.scores);
+  const [checks, setChecks] = useState(initial.data.checks);
+  const [startDate, setStartDate] = useState(initial.data.startDate);
   const [activeDay, setActiveDay] = useState(null);
   const [importCode, setImportCode] = useState("");
-  const [importMsg, setImportMsg] = useState("");
-  const [showSyncPanel, setShowSyncPanel] = useState(false);
+  const [importMsg, setImportMsg] = useState(incoming.error);
+  const [pending, setPending] = useState(incoming.pending);
+  const [showSyncPanel, setShowSyncPanel] = useState(!!incoming.pending || !!incoming.error);
   const [copied, setCopied] = useState(false);
-  const [startDate, setStartDate] = useState(null);
+  const [exportFallback, setExportFallback] = useState("");
   const [activeTab, setActiveTab] = useState("tracker");
   const [qrDataUrl, setQrDataUrl] = useState(null);
-  const [loaded, setLoaded] = useState(false);
+  const [qrError, setQrError] = useState("");
+  const [storageError, setStorageError] = useState(initial.error);
+  const stored = useRef(initial.raw);
+  const blocked = useRef(!!initial.error);
 
-  // ─── Load from localStorage or URL ?sync= param on mount ────────────────
   useEffect(() => {
-    try {
-      // Check for ?sync= in URL first (from QR code scan on another device)
-      const params = new URLSearchParams(window.location.search);
-      const syncCode = params.get("sync");
-      if (syncCode) {
-        const data = JSON.parse(decodeURIComponent(escape(atob(syncCode.trim()))));
-        if (data.scores) setScores(data.scores);
-        if (data.checks) setChecks(data.checks);
-        if (data.startDate) setStartDate(data.startDate);
-        // Clean the URL so it doesn't re-import on refresh
-        window.history.replaceState({}, "", window.location.pathname);
-        setLoaded(true);
-        return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('sync');
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    if (fragment.has('sync')) { fragment.delete('sync'); url.hash = fragment.toString(); }
+    window.history.replaceState(window.history.state, "", url);
+    const onStorage = event => {
+      if (event.key === STORAGE_KEY || event.key === null) {
+        blocked.current = true;
+        setStorageError('Progress changed in another tab. Saving is paused. Reload to use the latest progress, or export your current work first.');
       }
-      // Otherwise load from localStorage
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const data = JSON.parse(saved);
-        if (data.scores) setScores(data.scores);
-        if (data.checks) setChecks(data.checks);
-        if (data.startDate) setStartDate(data.startDate);
-      }
-    } catch {}
-    setLoaded(true);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  // ─── Auto-save to localStorage on every change ───────────────────────────
   useEffect(() => {
-    if (!loaded) return;
+    if (blocked.current) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ scores, checks, startDate }));
-    } catch {}
-  }, [scores, checks, startDate, loaded]);
+      if (localStorage.getItem(STORAGE_KEY) !== stored.current) throw new Error();
+      const next = JSON.stringify({ scores, checks, startDate });
+      localStorage.setItem(STORAGE_KEY, next);
+      stored.current = next;
+    } catch {
+      blocked.current = true;
+      // Synchronize external storage failure with its visible status.
+      setStorageError('Progress could not be saved, or changed in another tab. Saving is paused. Export your work before closing, then reload.');
+    }
+  }, [scores, checks, startDate]);
 
   const scoreEntries = useMemo(() => Object.entries(scores).map(([k, v]) => [parseInt(k), v]).filter(([, v]) => v !== "" && v !== null && v !== undefined), [scores]);
   const completedDays = scoreEntries.length;
@@ -170,48 +172,48 @@ export default function LifeInUKTracker() {
   }, [scoreEntries, avg]);
 
   // ─── Export / Import ──────────────────────────────────────────────────────
-  const getSaveCode = () => {
-    const data = JSON.stringify({ scores, checks, startDate });
-    return btoa(unescape(encodeURIComponent(data)));
-  };
+  const getSaveCode = () => encodeProgress({ scores, checks, startDate });
 
-  const exportCode = () => {
-    navigator.clipboard.writeText(getSaveCode()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  const exportCode = async () => {
+    const code = getSaveCode();
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { setExportFallback(code); setShowSyncPanel(true); }
   };
 
   const importProgress = () => {
-    try {
-      const data = JSON.parse(decodeURIComponent(escape(atob(importCode.trim()))));
-      if (data.scores) setScores(data.scores);
-      if (data.checks) setChecks(data.checks);
-      if (data.startDate) setStartDate(data.startDate);
-      setImportMsg("✅ Progress restored successfully!");
-      setImportCode("");
-      setTimeout(() => setImportMsg(""), 3000);
-    } catch {
-      setImportMsg("❌ Invalid code. Please paste the exact exported code.");
-    }
+    try { setPending(decodeProgress(importCode)); setImportMsg(""); }
+    catch { setImportMsg('Invalid code. Your existing progress has not changed.'); }
   };
-
-  // ─── QR code generation — encodes a full URL so scanning opens the app ──
-  const generateQR = async () => {
+  const confirmRestore = () => {
     try {
-      const code = getSaveCode();
-      const syncUrl = `${window.location.origin}${window.location.pathname}?sync=${code}`;
-      const url = await QRCode.toDataURL(syncUrl, { width: 280, margin: 2, color: { dark: "#1B3A6B", light: "#ffffff" } });
-      setQrDataUrl(url);
-    } catch {}
+      const next = JSON.stringify(pending);
+      localStorage.setItem(STORAGE_KEY, next);
+      stored.current = next;
+      blocked.current = false;
+      setScores(pending.scores); setChecks(pending.checks); setStartDate(pending.startDate);
+      setStorageError(""); setPending(null); setImportCode("");
+      setImportMsg('Progress restored successfully.');
+    } catch { setImportMsg('Restore could not be saved. Your current progress is unchanged. Export a backup and check browser storage.'); }
   };
 
   useEffect(() => {
-    if (showSyncPanel) generateQR();
-    else setQrDataUrl(null);
+    if (!showSyncPanel) return;
+    let cancelled = false;
+    const code = encodeProgress({ scores, checks, startDate });
+    const syncUrl = `${window.location.origin}${window.location.pathname}#sync=${encodeURIComponent(code)}`;
+    QRCode.toDataURL(syncUrl, { width: 280, margin: 2, color: { dark: "#1B3A6B", light: "#ffffff" } })
+      .then(url => { if (!cancelled) { setQrDataUrl(url); setQrError(""); } })
+      .catch(() => { if (!cancelled) { setQrDataUrl(null); setQrError('QR code unavailable. Use Export and paste the save code instead.'); } });
+    return () => { cancelled = true; };
   }, [showSyncPanel, scores, checks, startDate]);
 
   const handleScore = (dayId, val) => {
-    const n = parseInt(val);
+    const n = Number(val);
     if (val === "") { setScores(p => ({ ...p, [dayId]: "" })); return; }
-    if (!isNaN(n) && n >= 0 && n <= 24) {
+    if (Number.isInteger(n) && n >= 0 && n <= 24) {
       setScores(p => ({ ...p, [dayId]: n }));
       if (!startDate && completedDays === 0) setStartDate(new Date().toISOString().split("T")[0]);
     }
@@ -241,7 +243,7 @@ export default function LifeInUKTracker() {
               <p className="text-blue-200 text-sm mt-1">For Kennedy · 24 questions · 45 min · Pass: 18/24 (75%)</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowSyncPanel(!showSyncPanel)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-sm px-3 py-2 rounded-lg transition">
+              <button aria-expanded={showSyncPanel} onClick={() => setShowSyncPanel(!showSyncPanel)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-sm px-3 py-2 rounded-lg transition">
                 <Smartphone size={14} /> Sync
               </button>
               <button onClick={exportCode} className="flex items-center gap-1 bg-white text-blue-900 font-semibold text-sm px-3 py-2 rounded-lg hover:bg-blue-50 transition">
@@ -255,30 +257,38 @@ export default function LifeInUKTracker() {
             <div className="mt-4 bg-white/10 rounded-xl p-4 border border-white/20">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-white text-sm">📱 Sync to another device</h3>
-                <button onClick={() => setShowSyncPanel(false)} className="text-blue-200 hover:text-white"><X size={16}/></button>
+                <button aria-label="Close sync panel" onClick={() => setShowSyncPanel(false)} className="text-blue-200 hover:text-white"><X size={16}/></button>
               </div>
+              <p className="text-sm mb-3">Sync includes daily scores and tasks. Summary checklist stays on this device. Save codes are not encrypted; share only with people you trust.</p>
+              {pending && <div className="bg-white text-gray-900 p-3 rounded-lg mb-3" role="region" aria-label="Confirm progress restore">
+                <p>Replace daily progress in this browser with {Object.values(pending.scores).filter(v => v !== '').length} saved scores? Export your current progress first if you want to keep it.</p>
+                <div className="flex flex-wrap gap-3 mt-2"><button className="bg-blue-900 text-white px-3 py-2 rounded" onClick={confirmRestore}>Replace progress</button><button className="border px-3 py-2 rounded" onClick={() => setPending(null)}>Cancel restore</button></div>
+              </div>}
+              {exportFallback && <label className="block mb-3">Copy this save code manually<textarea aria-label="Exported save code" readOnly value={exportFallback} onFocus={e => e.target.select()} className="block w-full bg-white text-gray-900 p-2" /></label>}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {/* QR code */}
                 <div className="text-center">
-                  <p className="text-blue-200 text-xs mb-2">Scan with your other device's camera — it opens the app with your progress already loaded</p>
+                  <p className="text-blue-200 text-xs mb-2">Scan with your other device's camera — review and confirm the progress before restoring</p>
                   {qrDataUrl
                     ? <img src={qrDataUrl} alt="Sync QR Code" className="mx-auto rounded-lg bg-white p-2" style={{width:180,height:180}}/>
-                    : <div className="mx-auto rounded-lg bg-white/10 flex items-center justify-center" style={{width:180,height:180}}><span className="text-blue-200 text-xs">Generating…</span></div>
+                    : <div className="mx-auto rounded-lg bg-white/10 flex items-center justify-center" style={{width:180,height:180}}><span className="text-blue-200 text-xs">{qrError || "Generating…"}</span></div>
                   }
                 </div>
                 {/* Manual import */}
                 <div className="flex flex-col gap-2">
                   <p className="text-blue-200 text-xs">Or paste a save code from another device:</p>
                   <textarea
+                    aria-label="Save code to restore"
+                    maxLength={20000}
                     value={importCode}
                     onChange={e => setImportCode(e.target.value)}
                     placeholder="Paste save code here…"
                     className="flex-1 text-gray-800 text-xs px-3 py-2 rounded-lg border resize-none min-h-[80px]"
                   />
                   <button onClick={importProgress} className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-semibold">
-                    Restore Progress
+                    Review Restore
                   </button>
-                  {importMsg && <p className="text-sm font-medium text-yellow-200">{importMsg}</p>}
+                  {importMsg && <p role="status" className="text-sm font-medium text-yellow-200">{importMsg}</p>}
                 </div>
               </div>
             </div>
@@ -287,7 +297,7 @@ export default function LifeInUKTracker() {
           {/* STATS ROW */}
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard icon={<Calendar size={16}/>} label="Days Done" value={`${completedDays}/21`} />
-            <StatCard icon={<TrendingUp size={16}/>} label="Avg Score" value={avgPct ? `${avgPct}%` : "—"} sub={avg ? `${avg.toFixed(1)}/24` : ""} />
+            <StatCard icon={<TrendingUp size={16}/>} label="Avg Score" value={avgPct ? `${avgPct}%` : "—"} sub={avg !== null ? `${avg.toFixed(1)}/24` : ""} />
             <StatCard icon={<Target size={16}/>} label="Status" value={currentBand ? currentBand.status : "Not started"} sub={currentBand ? `Band ${currentBand.label}` : ""} />
             <StatCard icon={<Trophy size={16}/>} label="Ready?" value={isReady ? "YES — BOOK IT" : completedDays < 18 ? `${21 - completedDays} days left` : "Not yet"} highlight={isReady} />
           </div>
@@ -295,12 +305,13 @@ export default function LifeInUKTracker() {
       </div>
 
       {/* TABS */}
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="flex border-b border-gray-200 mt-4 gap-1">
+      <main className="max-w-4xl mx-auto px-4">
+        {storageError && <p role="alert" className="my-3 p-3 bg-amber-50 border border-amber-400 rounded text-amber-950">{storageError}</p>}
+        <nav aria-label="Study sections" className="grid grid-cols-2 sm:grid-cols-4 border-b border-gray-200 mt-4 gap-1">
           {[["tracker", "📅 Daily Tracker"], ["chart", "📊 Progress Chart"], ["ready", "🏆 Am I Ready?"], ["summary", "📖 Summary"]].map(([k, l]) => (
-            <button key={k} onClick={() => setActiveTab(k)} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${activeTab === k ? "bg-white border border-b-white text-blue-800 border-gray-200" : "text-gray-500 hover:text-gray-700"}`}>{l}</button>
+            <button key={k} aria-pressed={activeTab === k} onClick={() => setActiveTab(k)} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${activeTab === k ? "bg-white border border-b-white text-blue-800 border-gray-200" : "text-gray-500 hover:text-gray-700"}`}>{l}</button>
           ))}
-        </div>
+        </nav>
 
         {/* TAB: TRACKER */}
         {activeTab === "tracker" && (
@@ -310,7 +321,7 @@ export default function LifeInUKTracker() {
                 <div className="flex items-center gap-3 mb-3">
                   <div style={{ background: WEEK_COLORS[week] }} className="text-white text-xs font-bold px-3 py-1 rounded-full">WEEK {week}</div>
                   <span className="text-gray-600 font-medium text-sm">{WEEK_LABELS[week]}</span>
-                  <span className="text-gray-400 text-xs">{week === 1 ? "Target: 60%+" : week === 2 ? "Target: 75%+" : "Target: 85%+"}</span>
+                  <span className="text-gray-500 text-xs">{week === 1 ? "Target: 60%+" : week === 2 ? "Target: 75%+" : "Target: 85%+"}</span>
                 </div>
                 <div className="space-y-2">
                   {DAYS.filter(d => d.week === week).map(day => {
@@ -323,7 +334,7 @@ export default function LifeInUKTracker() {
                     return (
                       <div key={day.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                         {/* Day Header Row */}
-                        <button onClick={() => setActiveDay(isOpen ? null : day.id)} className="w-full text-left">
+                        <button aria-expanded={isOpen} aria-controls={`day-${day.id}`} onClick={() => setActiveDay(isOpen ? null : day.id)} className="w-full text-left">
                           <div className="flex items-center gap-3 p-3">
                             <div style={{ background: WEEK_COLORS[week], minWidth: 44 }} className="text-white text-xs font-bold rounded-lg p-2 text-center">
                               <div className="text-base font-black leading-none">{day.id}</div>
@@ -342,35 +353,30 @@ export default function LifeInUKTracker() {
                                   {score}/24 · {Math.round(score/24*100)}% · {band.icon}
                                 </div>
                               ) : (
-                                <div className="text-xs text-gray-400 px-2 py-1 rounded-lg bg-gray-50 border border-gray-200">
+                                <div className="text-xs text-gray-500 px-2 py-1 rounded-lg bg-gray-50 border border-gray-200">
                                   {checks_done > 0 ? `${checks_done}/${total_tasks} tasks` : "Not started"}
                                 </div>
                               )}
-                              {isOpen ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}
+                              {isOpen ? <ChevronUp size={16} className="text-gray-500"/> : <ChevronDown size={16} className="text-gray-500"/>}
                             </div>
                           </div>
                         </button>
 
                         {/* Expanded Day Panel */}
                         {isOpen && (
-                          <div className="border-t border-gray-100 p-4 space-y-4">
-                            {/* Tasks — FIX: div wrapper with onClick instead of label+button */}
+                          <div id={`day-${day.id}`} className="border-t border-gray-100 p-4 space-y-4">
+                            {/* Native checkboxes support pointer and keyboard input. */}
                             <div>
                               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">✅ Tasks</h4>
                               <div className="space-y-2">
                                 {day.tasks.map((task, i) => (
-                                  <div
+                                  <label
                                     key={i}
-                                    onClick={() => toggleCheck(day.id, i)}
                                     className="flex items-start gap-2 cursor-pointer group select-none"
                                   >
-                                    <div className="mt-0.5 shrink-0">
-                                      {dayChecks(day.id)[i]
-                                        ? <CheckCircle size={18} className="text-emerald-500"/>
-                                        : <Circle size={18} className="text-gray-300 group-hover:text-gray-400"/>}
-                                    </div>
-                                    <span className={`text-sm leading-snug ${dayChecks(day.id)[i] ? "line-through text-gray-400" : "text-gray-700"}`}>{task}</span>
-                                  </div>
+                                    <input type="checkbox" checked={!!dayChecks(day.id)[i]} onChange={() => toggleCheck(day.id, i)} className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+                                    <span className={`text-sm leading-snug ${dayChecks(day.id)[i] ? "line-through text-gray-500" : "text-gray-700"}`}>{task}</span>
+                                  </label>
                                 ))}
                               </div>
                             </div>
@@ -389,7 +395,7 @@ export default function LifeInUKTracker() {
                               <div className="flex items-center gap-3 flex-wrap">
                                 <div className="flex items-center gap-2">
                                   <input
-                                    type="number" min="0" max="24"
+                                    type="number" min="0" max="24" step="1" aria-label={`Day ${day.id} score out of 24`}
                                     value={score !== undefined && score !== "" ? score : ""}
                                     onChange={e => handleScore(day.id, e.target.value)}
                                     placeholder="0–24"
@@ -431,6 +437,7 @@ export default function LifeInUKTracker() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
               <h3 className="font-bold text-gray-800 mb-1">Score History (%)</h3>
               <p className="text-gray-500 text-xs mb-4">Log scores on Day cards to see your progress chart. Green line = 85% target. Red line = 75% pass mark.</p>
+              {scoreEntries.length === 0 && <p className="text-sm text-gray-700 mb-3">No scores yet. Add a score in Daily Tracker to get started.</p>}
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartData.filter(d => d.score !== null)} margin={{ top: 5, right: 10, left: -20, bottom: 20 }}>
                   <XAxis dataKey="day" tick={{ fontSize: 11 }} label={{ value: "Day", position: "insideBottom", offset: -10, fontSize: 11 }} />
@@ -445,6 +452,7 @@ export default function LifeInUKTracker() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              {scoreEntries.length > 0 && <details className="mt-3 text-sm"><summary>Scores as text</summary><ul>{scoreEntries.map(([day, score]) => <li key={day}>Day {day}: {score}/24 ({Math.round(score/24*100)}%)</li>)}</ul></details>}
             </div>
             <div className="grid grid-cols-3 gap-3">
               {[1,2,3].map(w => {
@@ -453,8 +461,8 @@ export default function LifeInUKTracker() {
                 return (
                   <div key={w} className="bg-white rounded-xl border border-gray-200 p-3 text-center shadow-sm">
                     <div style={{ color: WEEK_COLORS[w] }} className="text-xs font-bold uppercase tracking-wider">Week {w}</div>
-                    <div className="text-2xl font-black text-gray-800 mt-1">{wa ? `${wa.toFixed(0)}%` : "—"}</div>
-                    <div className="text-xs text-gray-400">{ws.length} sessions</div>
+                    <div className="text-2xl font-black text-gray-800 mt-1">{wa !== null ? `${wa.toFixed(0)}%` : "—"}</div>
+                    <div className="text-xs text-gray-500">{ws.length} sessions</div>
                     <div className="text-xs text-gray-500">{WEEK_LABELS[w]}</div>
                   </div>
                 );
@@ -497,7 +505,7 @@ export default function LifeInUKTracker() {
                     {c.met ? <CheckCircle size={18} className="text-emerald-500 shrink-0"/> : <Circle size={18} className="text-gray-300 shrink-0"/>}
                     <div>
                       <p className={`text-sm font-medium ${c.met ? "text-emerald-700" : "text-gray-600"}`}>{c.label}</p>
-                      <p className="text-xs text-gray-400">{c.current}</p>
+                      <p className="text-xs text-gray-500">{c.current}</p>
                     </div>
                   </div>
                 ));
@@ -535,10 +543,10 @@ export default function LifeInUKTracker() {
         {/* AUTO-SAVE NOTICE */}
         <div className="my-4 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
           <p className="text-xs text-emerald-800 font-medium">
-            💾 <strong>Progress auto-saves in this browser.</strong> Switching devices? Tap <strong>Sync</strong> (top right) and scan the QR code on your other device — it opens the app with your progress already loaded.
+            💾 <strong>{storageError ? "Saving is paused. Export your work before closing." : "Progress auto-saves in this browser."}</strong> Switching devices? Tap <strong>Sync</strong> (top right) and scan the QR code on your other device — review and confirm the progress before restoring.
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

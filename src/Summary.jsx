@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { CHECKLIST_KEY, loadChecklist } from "./progress";
 import { SUMMARY_CHAPTERS } from "./summaryData";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
@@ -11,7 +12,7 @@ function SectionTable({ headers, rows }) {
         <thead>
           <tr className="bg-blue-900 text-white">
             {headers.map((h, i) => (
-              <th key={i} className="px-3 py-2 text-left font-semibold text-xs tracking-wide">{h}</th>
+              <th scope="col" key={i} className="px-3 py-2 text-left font-semibold text-xs tracking-wide">{h}</th>
             ))}
           </tr>
         </thead>
@@ -78,16 +79,12 @@ function ChecklistGroup({ group, checked, onToggle }) {
           const key = `${group.label}::${i}`;
           const done = checked[key];
           return (
-            <li
-              key={i}
-              onClick={() => onToggle(key)}
-              className={`flex items-start gap-3 cursor-pointer rounded-lg px-3 py-2 transition-colors ${done ? "bg-green-50 text-gray-400 line-through" : "bg-white hover:bg-blue-50 text-gray-700"}`}
+            <li key={i}><label
+              className={`flex items-start gap-3 cursor-pointer rounded-lg px-3 py-2 transition-colors ${done ? "bg-green-50 text-gray-500 line-through" : "bg-white hover:bg-blue-50 text-gray-700"}`}
             >
-              <span className={`mt-0.5 flex-shrink-0 text-base ${done ? "text-green-500" : "text-gray-300"}`}>
-                {done ? "✓" : "○"}
-              </span>
+              <input type="checkbox" checked={!!done} onChange={() => onToggle(key)} className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
               <span className="text-sm">{item}</span>
-            </li>
+            </label></li>
           );
         })}
       </ul>
@@ -97,7 +94,7 @@ function ChecklistGroup({ group, checked, onToggle }) {
 
 function SectionChecklist({ groups, checked, onToggle }) {
   const totalItems = groups.reduce((s, g) => s + g.items.length, 0);
-  const doneItems = Object.values(checked).filter(Boolean).length;
+  const doneItems = groups.reduce((sum, group) => sum + group.items.filter((_, i) => checked[`${group.label}::${i}`]).length, 0);
   const pct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0;
 
   return (
@@ -155,14 +152,16 @@ function Chapter({ chapter, isOpen, onToggle, checklistState, onChecklistToggle 
   return (
     <div className="border border-gray-200 rounded-xl mb-3 overflow-hidden">
       <button
+        aria-expanded={isOpen}
+        aria-controls={`chapter-panel-${chapter.id}`}
         onClick={onToggle}
         className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-blue-50 transition-colors text-left"
       >
         <span className="font-semibold text-blue-900 text-sm">{chapter.title}</span>
-        {isOpen ? <ChevronUp size={16} className="text-blue-400 flex-shrink-0" /> : <ChevronDown size={16} className="text-gray-400 flex-shrink-0" />}
+        {isOpen ? <ChevronUp size={16} className="text-blue-400 flex-shrink-0" /> : <ChevronDown size={16} className="text-gray-500 flex-shrink-0" />}
       </button>
       {isOpen && (
-        <div className="px-4 pb-4 bg-white border-t border-gray-100">
+        <div id={`chapter-panel-${chapter.id}`} className="px-4 pb-4 bg-white border-t border-gray-100">
           {chapter.sections.map((s, i) => (
             <Section key={i} section={s} checklistState={checklistState} onChecklistToggle={onChecklistToggle} />
           ))}
@@ -174,38 +173,41 @@ function Chapter({ chapter, isOpen, onToggle, checklistState, onChecklistToggle 
 
 // ─── Main Summary component ───────────────────────────────────────────────────
 
-const CHECKLIST_KEY = "lituk-checklist-v1";
-
-function loadChecklist() {
-  try { return JSON.parse(localStorage.getItem(CHECKLIST_KEY) || "{}"); } catch { return {}; }
-}
-
 export default function Summary() {
   const [openChapters, setOpenChapters] = useState({ ch1: true });
-  const [checklistState, setChecklistState] = useState(() => loadChecklist());
+  const [initial] = useState(() => loadChecklist());
+  const [checklistState, setChecklistState] = useState(initial.data);
+  const [saveError, setSaveError] = useState(initial.error);
+  const stored = useRef(initial.raw);
 
   function toggleChapter(id) {
     setOpenChapters(prev => ({ ...prev, [id]: !prev[id] }));
   }
 
   function handleChecklistToggle(key) {
-    setChecklistState(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      try { localStorage.setItem(CHECKLIST_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
+    if (saveError) return;
+    const next = { ...checklistState, [key]: !checklistState[key] };
+    try {
+      const current = localStorage.getItem(CHECKLIST_KEY);
+      if (current !== stored.current) throw new Error();
+      const raw = JSON.stringify(next);
+      localStorage.setItem(CHECKLIST_KEY, raw);
+      stored.current = raw;
+      setChecklistState(next);
+    } catch { setSaveError('Checklist could not be saved, or changed in another tab. Your existing data is untouched. Reload before trying again.'); }
   }
 
   // Quick-jump: open a chapter and scroll to it
   function jumpTo(id) {
     setOpenChapters(prev => ({ ...prev, [id]: true }));
     setTimeout(() => {
-      document.getElementById(`chapter-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(`chapter-${id}`)?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
     }, 50);
   }
 
   return (
     <div className="max-w-2xl mx-auto">
+      {saveError && <p role="alert" className="p-3 mb-3 bg-amber-50 border border-amber-400 text-amber-950">{saveError}</p>}
       {/* Quick-jump bar */}
       <div className="flex flex-wrap gap-2 mb-5 p-3 bg-blue-50 rounded-xl border border-blue-100">
         <span className="text-xs text-blue-500 font-medium self-center mr-1">Jump to:</span>
