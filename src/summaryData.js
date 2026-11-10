@@ -462,11 +462,11 @@ export const SUMMARY_CHAPTERS = [
       {
         heading: "Courts — Civil / Small Claims",
         type: "table",
-        headers: ["Jurisdiction", "Small Claims Limit", "Court"],
+        headers: ["Jurisdiction", "Current general limit (exceptions apply)", "Court or procedure"],
         rows: [
-          ["England & Wales", "Up to £10,000", "Small Claims Court"],
-          ["Scotland", "Up to £5,000", "Sheriff Court"],
-          ["Northern Ireland", "Up to £3,000", "Small Claims Court"],
+          ["England & Wales", "Up to £10,000", "County Court small claims track"],
+          ["Scotland", "Up to £5,000", "Sheriff Court simple procedure"],
+          ["Northern Ireland", "Up to £5,000", "County Court small claims"],
         ],
       },
       {
@@ -475,7 +475,7 @@ export const SUMMARY_CHAPTERS = [
         headers: ["Jurisdiction", "Jury Size", "Verdicts available"],
         rows: [
           ["England, Wales & N. Ireland", "12 jurors", "Guilty / Not guilty"],
-          ["Scotland", "15 jurors", "Guilty / Not guilty / NOT PROVEN (unique to Scotland)"],
+          ["Scotland", "15 jurors", "Guilty or not guilty in new trials from 1 January 2026. Older materials include 'not proven'."],
         ],
       },
       {
@@ -522,8 +522,8 @@ export const SUMMARY_CHAPTERS = [
         type: "tips",
         items: [
           "CRITICAL: Jury size = 12 in England/Wales/NI; 15 in Scotland",
-          "CRITICAL: Only Scotland has the 'not proven' verdict",
-          "CRITICAL: Small claims = £10,000 (Eng/Wales), £5,000 (Scotland), £3,000 (NI)",
+          "Scotland abolished 'not proven' for new criminal trials from 1 January 2026.",
+          "Current general small-claims limits: £10,000 in England and Wales and £5,000 in Scotland and Northern Ireland. Check the official guide for the test.",
           "Age of criminal responsibility: 10 in Eng/Wales/NI; 12 in Scotland",
           "Scotland (1999) and Wales (1999) got devolution same year; N. Ireland was 1998",
           "NHS prescriptions are free in Scotland, Wales and N. Ireland — not England",
@@ -665,8 +665,8 @@ export const SUMMARY_CHAPTERS = [
             label: "Courts & Juries — Most Commonly Confused",
             items: [
               "Jury size: England/Wales/NI = 12. Scotland = 15.",
-              "Scotland ONLY has 'not proven' verdict (third option)",
-              "Small claims: Eng & Wales = £10,000. Scotland = £5,000. NI = £3,000.",
+              "Scotland abolished 'not proven' for new criminal trials from 1 January 2026. Check the official guide for the test.",
+              "Current general small-claims limits: £10,000 in England and Wales and £5,000 in Scotland and Northern Ireland. Exceptions apply.",
               "Minor crimes: Magistrates' Court (Eng/Wales); Sheriff Court (Scotland)",
               "Serious crimes: Crown Court (Eng/Wales/NI); High Court of Justiciary (Scotland)",
               "Age of criminal responsibility: 10 in Eng/Wales/NI; 12 in Scotland",

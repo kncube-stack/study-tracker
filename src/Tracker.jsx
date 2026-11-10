@@ -32,9 +32,9 @@ const DAYS = [
     tips:["Nightingale = Crimean War (1853–56). NOT WWI. Very common trap","Attlee created the NHS 1948 — NOT Churchill","Windrush generation 1948 = Caribbean immigrants invited to help rebuild","Beveridge Report = blueprint for welfare state"],
     reflect:["Who was PM during WWII? Who created the NHS?","When did women get equal voting rights? (1928, age 21)","What is the Beveridge Report?"] },
   { id:7,  week:1, title:"WEEKEND: Chapter 4 & 5 First Read", topic:"Ch.4 Society + Ch.5 Government/Law", time:"2–3 hours",
-    tasks:["Read all of Chapter 4: religion, customs/dates, sport, arts, famous Britons, places of interest","Read all of Chapter 5: Constitution, Parliament, PM + Cabinet, devolution, courts, voting","Memorise the courts table: England/Wales/NI vs Scotland","Memorise: 12 (Eng/Wales/NI jury) vs 15 (Scotland jury) — Scotland also has 'not proven'","Memorise small claims: £5,000 Eng/Wales vs £3,000 Scotland/NI","Do 2 practice tests"],
-    tips:["Scottish Parliament = 129 MSPs. Welsh Assembly = 60 AMs. NI Assembly = 90 MLAs","RESERVED to Westminster: defence, foreign affairs, immigration, taxation, social security","10 Downing Street = PM residence. Chequers = PM country house","Old Bailey = most famous criminal court in the world (London)"],
-    reflect:["How many MSPs / AMs / MLAs?","Which powers are reserved to Westminster?","What is the PM's official address and country house?"] },
+    tasks:["Read all of Chapter 4: religion, customs/dates, sport, arts, famous Britons, places of interest","Read all of Chapter 5: Constitution, Parliament, PM + Cabinet, devolution, courts, voting","Memorise the courts table: England/Wales/NI vs Scotland","Compare jury sizes: 12 in England, Wales and Northern Ireland, 15 in Scotland. Scotland abolished 'not proven' for new trials from 1 January 2026.","Compare the current general small-claims limits: £10,000 in England and Wales, £5,000 in Scotland and Northern Ireland. Check the official guide for the test.","Do 2 practice tests"],
+    tips:["Scotland has 129 MSPs and Northern Ireland has 90 MLAs. Wales has 96 Senedd members today; the publisher's handbook amendment sheet lists 60.","RESERVED to Westminster: defence, foreign affairs, immigration, taxation, social security","10 Downing Street = PM residence. Chequers = PM country house","Old Bailey = most famous criminal court in the world (London)"],
+    reflect:["How does the current number of Senedd members compare with the publisher's handbook amendment sheet?","Which powers are reserved to Westminster?","What is the PM's official address and country house?"] },
   { id:8,  week:2, title:"Re-read Weak Areas + 3 Tests",      topic:"Focus on your Week 1 error log",            time:"45–60 min",
     tasks:["Look at your Week 1 tracker — identify your 3 weakest topic areas","Re-read those specific sections in the Master Summary (10–15 mins max)","Do 3 × 24-question practice tests with 5-min breaks","After each test: immediately note wrong answers by topic"],
     tips:["Use britizen.uk for chapter-specific practice tests","If a topic comes up wrong twice: re-read that section before your next test","The act of testing — not reading — is what builds memory","Week 2 target: consistently hitting 70%+ (17/24)"],
@@ -77,7 +77,7 @@ const DAYS = [
     reflect:["Running average across Days 15–17?","Are you still making the same mistakes as Week 1?","What's your single most persistent wrong-answer topic?"] },
   { id:18, week:3, title:"Timed Mocks + Memorisation Drills",  topic:"Names, dates, numbers",                     time:"45–60 min",
     tasks:["15 mins: cover and recall each row of the Key Dates table from memory","Write: all 6 Henry VIII wives, all court distinctions, all jury sizes, all devolution member counts","Do 2 × 24-question timed mocks","Run through the High-Risk Checklist. Tick items you're confident on. Circle unsure ones."],
-    tips:["Courts: Magistrates (Eng/Wales/NI) = unpaid. JPs = unpaid. District Judge (NI) = paid","Scotland small claims = £3,000. England/Wales = £5,000. NI = £3,000","Devolution: Scotland 129 MSPs / Wales 60 AMs / NI 90 MLAs","Council of Europe ≠ European Union. Council of Europe does the ECHR"],
+    tips:["Courts: Magistrates (Eng/Wales/NI) = unpaid. JPs = unpaid. District Judge (NI) = paid","Current general small-claims limits are £10,000 in England and Wales and £5,000 in Scotland and Northern Ireland. Exceptions apply.","Scotland has 129 MSPs and Northern Ireland has 90 MLAs. The current Senedd has 96 members; the publisher's handbook amendment sheet lists 60.","Council of Europe ≠ European Union. Council of Europe does the ECHR"],
     reflect:["Any checklist items still not 100% certain? Focus on those tomorrow","Running 3-week average so far?","How many questions (out of 24) are you getting wrong consistently?"] },
   { id:19, week:3, title:"Final Timed Mocks — Pre-Marathon",   topic:"Confidence building",                       time:"45–60 min",
     tasks:["Review your circled checklist items from Day 18 (10 mins only)","Do 2 × 24-question timed mocks","Calculate your Week 3 running average (Days 15–19)","If running average 85%+: you are ready for the weekend final assessment"],
@@ -307,6 +307,18 @@ export default function LifeInUKTracker() {
       {/* TABS */}
       <main className="max-w-4xl mx-auto px-4">
         {storageError && <p role="alert" className="my-3 p-3 bg-amber-50 border border-amber-400 rounded text-amber-950">{storageError}</p>}
+        <details className="mt-4 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+          <summary className="cursor-pointer font-semibold">Study sources and recent changes</summary>
+          <p className="mt-2">Checked 10 November 2026. Use the official Guide for New Residents to prepare for the test. The current-law notes in this tracker are for context.</p>
+          <p className="mt-2">The publisher’s amendment sheet lists 60 Senedd members. The Senedd has 96 members following the May 2026 election. The small-claims figures are current general limits, with exceptions.</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li><a className="underline" href="https://www.gov.uk/life-in-the-uk-test">GOV.UK test and study guidance</a></li>
+            <li><a className="underline" href="https://www.tsoshop.co.uk/gempdf/Life_in_the_UK_latest_impression_amendments%2003012025.pdf">Publisher’s handbook amendments (PDF)</a></li>
+            <li><a className="underline" href="https://senedd.wales/how-we-work/elections-and-voting/senedd-elections/">Senedd elections and membership</a></li>
+            <li><a className="underline" href="https://www.gov.scot/news/abolition-of-not-proven-verdict/">Scottish Government guidance on the not proven verdict</a></li>
+            <li>Small claims guidance for <a className="underline" href="https://www.gov.uk/government/publications/small-claims-track-fast-track-and-multi-track-ex305-and-ex306">England and Wales</a>, <a className="underline" href="https://www.scotcourts.gov.uk/taking-action/simple-procedure/how-to-make-a-claim-with-simple-procedure">Scotland</a>, and <a className="underline" href="https://www.justice-ni.gov.uk/news/long-increases-small-claims-court-limit">Northern Ireland</a></li>
+          </ul>
+        </details>
         <nav aria-label="Study sections" className="grid grid-cols-2 sm:grid-cols-4 border-b border-gray-200 mt-4 gap-1">
           {[["tracker", "📅 Daily Tracker"], ["chart", "📊 Progress Chart"], ["ready", "🏆 Am I Ready?"], ["summary", "📖 Summary"]].map(([k, l]) => (
             <button key={k} aria-pressed={activeTab === k} onClick={() => setActiveTab(k)} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${activeTab === k ? "bg-white border border-b-white text-blue-800 border-gray-200" : "text-gray-500 hover:text-gray-700"}`}>{l}</button>
